@@ -3,6 +3,7 @@
 
 #nullable disable
 
+using System.ComponentModel;
 using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms.Metafiles;
@@ -847,6 +848,97 @@ public class NumericUpDownTests
         public void CallUpdateEditText()
         {
             UpdateEditText();
+        }
+    }
+
+    /// <summary>
+    ///  Regression test for https://github.com/dotnet/winforms/issues/13470.
+    ///  A <see cref="NumericUpDown"/> on an inactive <see cref="TabPage"/> shares the same
+    ///  <see cref="BindingManagerBase"/> as a sibling control on the active tab. When the
+    ///  active control's binding pushes data, the framework must not attempt to set a null
+    ///  (default) value on the inactive control before it has been created, because that
+    ///  bypasses the control's Minimum/Maximum validation and throws ArgumentOutOfRangeException.
+    /// </summary>
+    [WinFormsFact]
+    public void NumericUpDown_DataBinding_InactiveTabPage_DoesNotThrowOnValueChange()
+    {
+        // Arrange – data object shared by both bindings.
+        var data = new NotifyingData { TestInt = 42, TestInt2 = 18 };
+
+        using Form form = new() { Size = new Size(200, 160) };
+        using TabControl tabControl = new() { Dock = DockStyle.Fill };
+        form.Controls.Add(tabControl);
+
+        using TabPage tabPage1 = new() { Text = "tabPage1" };
+        tabControl.TabPages.Add(tabPage1);
+
+        using NumericUpDown num1 = new();
+        num1.DataBindings.Add(nameof(num1.Value), data, nameof(data.TestInt), false, DataSourceUpdateMode.OnPropertyChanged);
+        tabPage1.Controls.Add(num1);
+
+        using TabPage tabPage2 = new() { Text = "tabPage2" };
+        tabControl.TabPages.Add(tabPage2);
+
+        // num2 has a non-default Minimum; assigning Value=0 would throw without the fix.
+        using NumericUpDown num2 = new() { Minimum = 8 };
+        num2.DataBindings.Add(nameof(num2.Value), data, nameof(data.TestInt2), false, DataSourceUpdateMode.OnPropertyChanged);
+        tabPage2.Controls.Add(num2);
+
+        // Show the form so tabPage1's controls are created, but tabPage2's are still not created.
+        form.Show();
+        Assert.True(num1.IsHandleCreated, "num1 should be created when its tab page is active.");
+        Assert.False(num2.IsHandleCreated, "num2 should NOT be created when its tab page is inactive.");
+
+        // Act – changing num1's value pushes to the data source, which notifies the shared
+        // BindingManagerBase and triggers PushData() on ALL bindings including num2's.
+        // Without the fix this throws ArgumentOutOfRangeException from num2.set_Value(0).
+        Exception caughtException = null;
+        try
+        {
+            num1.DownButton();
+        }
+        catch (Exception ex)
+        {
+            caughtException = ex;
+        }
+
+        // Assert – no exception, and the data source was updated via num1's binding.
+        Assert.Null(caughtException);
+        Assert.Equal(41, data.TestInt);
+        Assert.Equal(18, data.TestInt2); // num2's data must not be corrupted.
+    }
+
+    private sealed class NotifyingData : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private int _testInt;
+        private int _testInt2;
+
+        public int TestInt
+        {
+            get => _testInt;
+            set
+            {
+                if (_testInt != value)
+                {
+                    _testInt = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TestInt)));
+                }
+            }
+        }
+
+        public int TestInt2
+        {
+            get => _testInt2;
+            set
+            {
+                if (_testInt2 != value)
+                {
+                    _testInt2 = value;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TestInt2)));
+                }
+            }
         }
     }
 }

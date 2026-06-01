@@ -986,8 +986,14 @@ public partial class Binding
                 SetPropValue(controlValue);
                 _state.ChangeFlags(BindingStates.Modified, false);
             }
-            else
+            else if (ComponentCreated)
             {
+                // Only clear the control property when the component has been created.
+                // If the component has not been created yet (e.g. a control on a hidden TabPage),
+                // skipping SetPropValue(null) avoids setting the property to a default value that
+                // may violate the control's validation constraints (e.g. NumericUpDown.Minimum > 0).
+                // The correct data-source value will be pushed via UpdateIsBinding → PushData once
+                // the control is eventually created.
                 SetPropValue(null);
             }
         }
