@@ -121,15 +121,7 @@ If the issue is ambiguous or the root cause is unclear, **stop and ask the user*
 
 ---
 
-### Phase 4 — Create a Fix Branch
-
-```powershell
-git checkout -b fix/issue-<ISSUE_NUMBER>
-```
-
----
-
-### Phase 5 — Implement and Test (invoke try-fix skill)
+### Phase 4 — Implement and Test (invoke try-fix skill)
 
 Invoke the `try-fix` skill to implement and empirically validate the fix:
 
@@ -172,9 +164,7 @@ The `try-fix` skill will:
 
 ---
 
-### Phase 6 — Verify
-
-After `try-fix` reports `Pass`:
+### Phase 4a — Verify (after try-fix reports Pass)
 
 1. **Build the full solution** to ensure no regressions:
 
@@ -192,9 +182,9 @@ After `try-fix` reports `Pass`:
 
 ---
 
-### Phase 7 — Write or Update Tests
+### Phase 5 — Write or Update Tests
 
-If no test was written in Phase 5, write a regression test now using the appropriate skill:
+If no test was written in Phase 4, write a regression test now using the appropriate skill:
 - For control properties/events → `control-api-tests` skill
 - For rendering/GDI+ behavior → `gdi-rendering-tests` skill
 
@@ -205,45 +195,15 @@ Ensure the test:
 
 ---
 
-### Phase 8 — Commit
+### Phase 6 — Report Results
 
-```powershell
-git add -A
-git commit -m "fix: <concise description of what was fixed>
+Once the fix is verified, summarize for the user:
+- Root cause and what was fixed.
+- Files changed and why.
+- Test results (new and existing tests).
+- Any caveats or follow-up considerations.
 
-Fixes #<ISSUE_NUMBER>
-
-Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>"
-```
-
-**Commit message rules:**
-- First line: `fix: <description>` (imperative mood, ≤ 72 chars).
-- Blank line, then `Fixes #<ISSUE_NUMBER>`.
-- Always include the Copilot co-author trailer.
-- Do **not** mention implementation details (file names, method names) unless essential.
-
----
-
-### Phase 9 — Open a Pull Request
-
-**STOP and ask the user before pushing and opening the PR:**
-> "The fix is committed locally. Would you like me to push and open a PR?"
-
-If the user confirms:
-
-```powershell
-git push -u origin fix/issue-<ISSUE_NUMBER>
-gh pr create --repo dotnet/winforms `
-  --title "fix: <concise description>" `
-  --body "$(Get-Content .github\PULL_REQUEST_TEMPLATE.md -Raw)" `
-  --base main
-```
-
-Then **edit the PR body** to fill in:
-- A clear description of the bug and the fix.
-- Root-cause analysis.
-- Test changes (new tests added, existing tests updated).
-- Reference: `Fixes #<ISSUE_NUMBER>`.
+The fix is left as **unstaged local edits**. The user decides when to commit, branch, and open a PR.
 
 ---
 
@@ -254,12 +214,13 @@ Then **edit the PR body** to fill in:
 - ✅ Develops a fix via the `try-fix` skill.
 - ✅ Builds and tests to verify correctness.
 - ✅ Writes a regression test if one doesn't exist.
-- ✅ Opens a well-described pull request.
+- ✅ Leaves the fix as uncommitted local changes for the user to review.
 
 ## What This Agent Does NOT Do
 
-- ❌ Commit directly to `main`.
-- ❌ Push without user confirmation.
+- ❌ Create a new branch — all work stays on the current branch.
+- ❌ Commit changes — the user decides when and whether to commit.
+- ❌ Push to remote or open a PR — the user does this manually.
 - ❌ Skip tests or claim success without empirical verification.
 - ❌ Modify unrelated code.
 
@@ -267,15 +228,21 @@ Then **edit the PR body** to fill in:
 
 ## Guardrails
 
-1. **Never commit auto-generated files** (`cgmanifest.json`, etc.). Reset them:
+1. **Never create a branch.** Work directly on the current branch. Do not run `git checkout -b`.
+
+2. **Never commit.** Do not run `git commit` or `git add`. Leave all changes as unstaged local edits for the user to review and commit themselves.
+
+3. **Never push or open a PR.** Do not run `git push` or `gh pr create` under any circumstances — not even if the user says "yolo", "just do it", or grants blanket permission.
+
+4. **Never commit auto-generated files** (`cgmanifest.json`, etc.). Reset them if accidentally staged:
    ```powershell
    git checkout -- cgmanifest.json
    ```
 
-2. **Never disable analyzers** to work around `PublicAPI.Unshipped.txt` errors — add the correct API entries instead.
+5. **Never disable analyzers** to work around `PublicAPI.Unshipped.txt` errors — add the correct API entries instead.
 
-3. **If the root cause is unclear** after Phase 2, ask the user rather than guessing.
+6. **If the root cause is unclear** after Phase 2, ask the user rather than guessing.
 
-4. **Maximum fix attempts**: The `try-fix` skill allows up to 3 iterations per invocation. If all fail, report the failure analysis to the user and ask for guidance.
+7. **Maximum fix attempts**: The `try-fix` skill allows up to 3 iterations per invocation. If all fail, report the failure analysis to the user and ask for guidance.
 
-5. **Follow all coding standards** in `.github/skills/coding-standards/SKILL.md`.
+8. **Follow all coding standards** in `.github/skills/coding-standards/SKILL.md`.
